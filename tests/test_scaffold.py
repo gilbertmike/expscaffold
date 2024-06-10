@@ -1,6 +1,8 @@
 import unittest
-
 from itertools import product
+from pathlib import Path
+
+import pandas as pd
 
 from expscaffold import ExperimentResult, ExperimentRunner, run_experiment
 
@@ -14,8 +16,9 @@ class TestResult(unittest.TestCase):
 
         self.assertRaises(AttributeError, lambda: print(result.unset_name))
 
+
 class TestScaffoldSumExperiment(unittest.TestCase):
-    def test_scaffold_product(self):
+    def test_with_product(self):
         collected_result = run_experiment(
             TestScaffoldSumExperiment._experiment,
             ['var1', 'var2'],
@@ -23,7 +26,7 @@ class TestScaffoldSumExperiment(unittest.TestCase):
         )
         self._check_result(collected_result, 9)
 
-    def test_scaffold_zip(self):
+    def test_with_zip(self):
         collected_result = run_experiment(
             TestScaffoldSumExperiment._experiment,
             ['var1', 'var2'],
@@ -31,7 +34,7 @@ class TestScaffoldSumExperiment(unittest.TestCase):
         )
         self._check_result(collected_result, 3)
 
-    def test_scaffold_parallel(self):
+    def test_parallel(self):
         collected_result = ExperimentRunner(
             TestScaffoldSumExperiment._experiment,
             ['var1', 'var2'],
@@ -39,6 +42,28 @@ class TestScaffoldSumExperiment(unittest.TestCase):
         ).configure_parallelism(3).run()
 
         self._check_result(collected_result, 3)
+
+    def test_checkpointing(self):
+        CHECKPOINT_PATH = Path(__file__).parent / 'tmp'
+
+        collected_result = ExperimentRunner(
+            TestScaffoldSumExperiment._experiment,
+            ['var1', 'var2'],
+            zip([1, 2, 3], [1, 2, 3])
+        )\
+        .configure_autosave(1, CHECKPOINT_PATH)\
+        .run()
+
+        self._check_result(collected_result, 3)
+
+        checkpoint_fnames = list(CHECKPOINT_PATH.iterdir())
+        self.assertEqual(len(checkpoint_fnames), 3)
+
+        for fname in checkpoint_fnames:
+            n_exps = int(str(fname.parts[-1]).split('.')[0])
+            df = pd.read_csv(fname)
+            self.assertEqual(len(df), n_exps)
+
 
     @staticmethod
     def _experiment(result: ExperimentResult, free_var1, free_var2):
